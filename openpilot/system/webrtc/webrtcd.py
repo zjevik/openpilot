@@ -32,6 +32,9 @@ from openpilot.common.params import Params
 from openpilot.cereal import messaging, log
 
 
+VIDEO_STREAM_CAMERAS = ("wideRoad", "driver")
+
+
 # socket trick: route lookup for 8.8.8.8 (nothing is sent or actually connected to)
 # return the source interfaces IP which is the default interface of the device
 def _default_route_ip() -> str | None:
@@ -258,8 +261,11 @@ class StreamSession:
     builder = WebRTCAnswerBuilder(body.sdp)
 
     self.enabled = body.enabled
-    self.video_track = LiveStreamVideoStreamTrack(body.init_camera, self.enabled) if not debug_mode else VideoStreamTrack()
-    builder.add_video_stream(body.init_camera, self.video_track)
+    self.video_tracks = {}
+    for camera in VIDEO_STREAM_CAMERAS:
+      track = LiveStreamVideoStreamTrack(camera, self.enabled) if not debug_mode else VideoStreamTrack()
+      self.video_tracks[camera] = track
+      builder.add_video_stream(camera, track)
     self.stream = builder.stream()
 
     self.incoming_bridge: CerealIncomingMessageProxy | None = None
@@ -277,8 +283,8 @@ class StreamSession:
     self._cleanup_done = False
     self.logger = logging.getLogger("webrtcd")
     self.logger.info(
-      "New stream session (%s), init camera %s, video enabled %s, incoming services %s, outgoing services %s",
-      self.identifier, body.init_camera, body.enabled, body.bridge_services_in, body.bridge_services_out,
+      "New stream session (%s), video cameras %s, video enabled %s, incoming services %s, outgoing services %s",
+      self.identifier, list(self.video_tracks), body.enabled, body.bridge_services_in, body.bridge_services_out,
     )
 
   def start(self):
@@ -303,25 +309,30 @@ class StreamSession:
 
         match msg_type:
           case "livestreamCameraSwitch":
-            self.video_track.switch_camera(payload["data"]["camera"])
+            # Multiple video channels are negotiated up front; camera switching is only
+            # meaningful for legacy single-track sessions.
+            if len(self.video_tracks) == 1:
+              next(iter(self.video_tracks.values())).switch_camera(payload["data"]["camera"])
           case "livestreamSettings":
             self.bitrate_controller.set_quality(payload["data"]["quality"])
           case "livestreamVideoEnable":
             enabled = payload["data"]["enabled"]
             self.enabled = enabled
-            self.video_track.enable(enabled)
-            self.outgoing_bridge.enable(enabled)
+            for track in self.video_tracks.values():
+              if hasattr(track, "enable"):
+                track.enable(enabled)
+            if self.outgoing_bridge is not None:
+              self.outgoing_bridge.enable(enabled)
             self.bitrate_controller.enable(enabled)
-            if not enabled:
-              self.params.put("LivestreamRequestKeyframe", True)
           case "clockSync":
             pong = json.dumps({"type": "clockSync", "data": {
               "action": "pong", "browserSendTime": payload["data"]["browserSendTime"], "deviceTime": time.time() * 1000, # noqa: TID251
             }})
             self.stream.get_messaging_channel().send(pong)
           case "enableTimingSei":
-            if hasattr(self.video_track, 'timing_sei_enabled'):
-              self.video_track.timing_sei_enabled = bool(payload["data"]["enabled"])
+            for track in self.video_tracks.values():
+              if hasattr(track, 'timing_sei_enabled'):
+                track.timing_sei_enabled = bool(payload["data"]["enabled"])
           case _:
             if payload.get("type") not in self.incoming_bridge_services:
               return
@@ -331,7 +342,6 @@ class StreamSession:
 
   async def run(self):
     try:
-      self.params.put("LivestreamRequestKeyframe", True)
       await asyncio.wait_for(self.stream.wait_for_connection(), timeout=15)
       if self.stream.has_messaging_channel():
         self.stream.set_message_handler(self.message_handler)
@@ -356,13 +366,12 @@ class StreamSession:
       if self._cleanup_done:
         return
       self._cleanup_done = True
-      self.params.put("LivestreamRequestKeyframe", False)
       await self.bitrate_controller.stop()
       if self.outgoing_bridge is not None:
         await self.outgoing_bridge.stop()
-      if self.video_track is not None:
-        self.video_track.stop()
-        self.video_track = None
+      for track in self.video_tracks.values():
+        track.stop()
+      self.video_tracks.clear()
       await self.stream.stop()
 
 
