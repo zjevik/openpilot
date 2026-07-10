@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-from openpilot.selfdrive.modeld.helpers import MODELS_DIR, get_tg_input_devices
+from openpilot.selfdrive.modeld.helpers import MODELS_DIR, get_tg_input_devices, usbgpu_present, modeld_pkl_path
 from tinygrad.tensor import Tensor
 import time
 import pickle
@@ -14,7 +14,7 @@ from openpilot.common.realtime import config_realtime_process
 from openpilot.common.transformations.model import dmonitoringmodel_intrinsics
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
-from openpilot.common.file_chunker import open_file_chunked
+from openpilot.common.file_chunker import open_file_chunked, get_manifest_path
 from openpilot.selfdrive.modeld.parse_model_outputs import sigmoid, safe_exp
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.dmonitoringmodeld"
@@ -107,7 +107,8 @@ def get_driverstate_packet(model_output, frame_id: int, location_ts: int, exec_t
 
 
 def main():
-  config_realtime_process(7, 5)
+  USBGPU = usbgpu_present() and os.path.isfile(get_manifest_path(modeld_pkl_path(usbgpu=True)))
+  config_realtime_process([0, 1, 2, 3] if USBGPU else 7, 5)
 
   cloudlog.warning("connecting to driver stream")
   vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_DRIVER, True)

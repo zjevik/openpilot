@@ -17,6 +17,12 @@ function agnos_init {
   sudo chgrp gpu /dev/adsprpc-smd /dev/ion /dev/kgsl-3d0
   sudo chmod 660 /dev/adsprpc-smd /dev/ion /dev/kgsl-3d0
 
+  # This kernel panics when throttling the eGPU model's sustained RT workload.
+  sudo udevadm settle
+  if python3 -c 'from openpilot.selfdrive.modeld.helpers import usbgpu_present; raise SystemExit(not usbgpu_present())'; then
+    sudo sh -c 'echo -1 > /proc/sys/kernel/sched_rt_runtime_us'
+  fi
+
   # Check if AGNOS update is required
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
     AGNOS_PY="$DIR/openpilot/common/hardware/tici/agnos.py"
