@@ -19,16 +19,9 @@ jobs:
 
       - name: Fetch Upstream Updates and Tags
         run: |
-          # 1. Fetch the official upstream URL associated with your fork's metadata
-          UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://github.com{{ github.repository }}" | jq -r '.parent.clone_url')
+          UPSTREAM_URL="https://github.com/commaai/openpilot"
 
-          if [ "$UPSTREAM_URL" = "null" ] || [ -z "$UPSTREAM_URL" ]; then
-            echo "Error: This repository does not appear to be a fork."
-            exit 1
-          fi
-
-          echo "Upstream URL found: $UPSTREAM_URL"
+          echo "Connecting to hardcoded upstream URL: $UPSTREAM_URL"
           git remote add upstream "$UPSTREAM_URL"
           git fetch upstream --tags
 
