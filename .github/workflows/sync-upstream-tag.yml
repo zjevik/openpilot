@@ -41,7 +41,7 @@ jobs:
           git checkout "tags/$NEWEST_TAG"
 
           # 4. Create or overwrite the local branch tracking this exact point
-          git switch -B newest_release
+          git switch -C newest_release
 
           # 5. Push and completely overwrite the branch in your fork
           git push origin newest_release --force
