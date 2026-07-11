@@ -25,23 +25,33 @@ jobs:
           git remote add upstream "$UPSTREAM_URL"
           git fetch upstream --tags
 
-      - name: Determine Newest Tag and Deploy
+      - name: Process Tag and Sync Seamlessly
         run: |
-          # 2. Get the newest tag name sorted by natural semantic versioning
+          # 1. Get the newest upstream semantic version tag
           NEWEST_TAG=$(git tag -l --sort=-v:refname | head -n 1)
-
           if [ -z "$NEWEST_TAG" ]; then
             echo "No tags found in the upstream repository."
             exit 1
           fi
-
           echo "The newest upstream tag is: $NEWEST_TAG"
 
-          # 3. Force checkout the code state at that specific tag
-          git checkout "tags/$NEWEST_TAG"
+          # 2. Set up Git author signature profile for clean execution
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Actions Nightly Sync"
 
-          # 4. Create or overwrite the local branch tracking this exact point
-          git switch -C newest_release
+          # 3. Create or switch into your tracking branch locally
+          git checkout -B newest_release
 
-          # 5. Push and completely overwrite the branch in your fork
-          git push origin newest_release --force
+          # 4. Overwrite local workspace files with the targeted upstream tag files
+          # This replaces the content of the files without blowing up your git branch commit tree history
+          git checkout "tags/$NEWEST_TAG" -- .
+
+          # 5. Check if there are any core content file differences
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "No updates detected. Your branch is completely caught up with tag $NEWEST_TAG."
+          else
+            echo "New software updates detected from upstream tag $NEWEST_TAG! Committing files..."
+            git add -A
+            git commit -m "Automated Sync: Updated openpilot files to match upstream tag $NEWEST_TAG"
+            git push origin newest_release
+          fi
