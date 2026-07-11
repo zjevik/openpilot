@@ -1,0 +1,54 @@
+name: Sync Upstream Newest Tag
+on:
+  schedule:
+    # Runs every night at 3:15 AM UTC (Avoids top-of-the-hour high traffic delays)
+    - cron: '15 3 * * *'
+  workflow_dispatch: # Allows you to trigger this action manually from the UI anytime
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Essential permission to push updates to your repository
+
+    steps:
+      - name: Checkout Forked Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history so git can trace upstream branches and tags
+
+      - name: Fetch Upstream Updates and Tags
+        run: |
+          # 1. Fetch the official upstream URL associated with your fork's metadata
+          UPSTREAM_URL=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://github.com{{ github.repository }}" | jq -r '.parent.clone_url')
+
+          if [ "$UPSTREAM_URL" = "null" ] || [ -z "$UPSTREAM_URL" ]; then
+            echo "Error: This repository does not appear to be a fork."
+            exit 1
+          fi
+
+          echo "Upstream URL found: $UPSTREAM_URL"
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream --tags
+
+      - name: Determine Newest Tag and Deploy
+        run: |
+          # 2. Get the newest tag name sorted by natural semantic versioning
+          NEWEST_TAG=$(git tag -l --sort=-v:refname | head -n 1)
+
+          if [ -z "$NEWEST_TAG" ]; then
+            echo "No tags found in the upstream repository."
+            exit 1
+          fi
+
+          echo "The newest upstream tag is: $NEWEST_TAG"
+
+          # 3. Force checkout the code state at that specific tag
+          git checkout "tags/$NEWEST_TAG"
+
+          # 4. Create or overwrite the local branch tracking this exact point
+          git switch -B newest_release
+
+          # 5. Push and completely overwrite the branch in your fork
+          git push origin newest_release --force
