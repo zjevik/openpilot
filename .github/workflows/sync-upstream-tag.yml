@@ -17,6 +17,16 @@ jobs:
         with:
           fetch-depth: 0 # Fetches full history so git can trace upstream branches and tags
 
+      - name: Disable Git LFS auto-sync
+        run: |
+          # openpilot ships a .lfsconfig pointing at comma's private GitLab LFS
+          # server (with an ssh:// push URL). We don't want Actions runners
+          # trying to smudge/push real LFS content there - that's what causes
+          # "Host key verification failed" on push. Uninstalling LFS locally
+          # keeps LFS-tracked files as plain pointer text, which is all we
+          # need to detect and sync upstream changes.
+          git lfs uninstall --local
+
       - name: Fetch Upstream Updates and Tags
         run: |
           UPSTREAM_URL="https://github.com/commaai/openpilot"
