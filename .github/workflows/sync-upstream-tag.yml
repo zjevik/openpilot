@@ -37,6 +37,8 @@ jobs:
 
       - name: Process Tag and Sync Seamlessly
         run: |
+          LAST_TAG_FILE=".github/last-synced-tag.txt"
+
           # 1. Get the newest upstream semantic version tag
           NEWEST_TAG=$(git tag -l --sort=-v:refname | head -n 1)
           if [ -z "$NEWEST_TAG" ]; then
@@ -49,16 +51,34 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Actions Nightly Sync"
 
-          # 3. Create or switch into your tracking branch locally
-          git checkout -B newest_release
+          # 3. Resume the existing newest_release branch if one already exists
+          # on origin, so we're diffing/tracking against the last sync rather
+          # than resetting to the default branch every run.
+          if git fetch origin newest_release; then
+            git checkout -B newest_release origin/newest_release
+          else
+            echo "No existing newest_release branch on origin - starting fresh."
+            git checkout -B newest_release
+          fi
 
-          # 4. Overwrite local workspace files with the targeted upstream tag files
+          # 4. Bail out early if this tag was already synced last run - no need
+          # to touch the working tree at all.
+          if [ -f "$LAST_TAG_FILE" ] && [ "$(cat "$LAST_TAG_FILE")" = "$NEWEST_TAG" ]; then
+            echo "Newest upstream tag ($NEWEST_TAG) matches the last synced tag. Nothing to do."
+            exit 0
+          fi
+
+          # 5. Overwrite local workspace files with the targeted upstream tag files
           # This replaces the content of the files without blowing up your git branch commit tree history
           git checkout "tags/$NEWEST_TAG" -- .
 
-          # 5. Check if there are any core content file differences
+          # 6. Record the tag we're syncing to, so future runs can short-circuit
+          mkdir -p "$(dirname "$LAST_TAG_FILE")"
+          echo "$NEWEST_TAG" > "$LAST_TAG_FILE"
+
+          # 7. Check if there are any core content file differences
           if git diff --quiet && git diff --staged --quiet; then
-            echo "No updates detected. Your branch is completely caught up with tag $NEWEST_TAG."
+            echo "No file changes detected despite tag change. Your branch is caught up with tag $NEWEST_TAG."
           else
             echo "New software updates detected from upstream tag $NEWEST_TAG! Committing files..."
             git add -A
