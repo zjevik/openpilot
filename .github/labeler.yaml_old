@@ -25,3 +25,5 @@ multilanguage:
 autonomy:
   - changed-files:
     - any-glob-to-all-files: "{openpilot/selfdrive/modeld/models/**,openpilot/selfdrive/test/process_replay/model_replay_ref_commit}"
+
+test
