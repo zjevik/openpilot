@@ -10,6 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Essential permission to push updates to your repository
+    env:
+      # Upstream LFS objects belong to the upstream repository and must not be
+      # uploaded through credentials from this fork. Keep LFS pointer files in Git.
+      GIT_LFS_SKIP_SMUDGE: 1
+      GIT_LFS_SKIP_PUSH: 1
 
     steps:
       - name: Checkout Forked Repository
