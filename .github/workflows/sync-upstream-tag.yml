@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Essential permission to push updates to your repository
+      workflows: write # Required to trigger the downstream workflow after syncing upstream tags
     env:
       # Upstream LFS objects belong to the upstream repository and must not be
       # uploaded through credentials from this fork. Keep LFS pointer files in Git.
