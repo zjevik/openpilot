@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Essential permission to push updates to your repository
-      workflows: write # Required to trigger the downstream workflow after syncing upstream tags
+
     env:
       # Upstream LFS objects belong to the upstream repository and must not be
       # uploaded through credentials from this fork. Keep LFS pointer files in Git.
@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetches full history so git can trace upstream branches and tags
+          token: ${{ secrets.SYNC_PAT }}
 
       - name: Disable Git LFS auto-sync
         run: |
